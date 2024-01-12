@@ -1,12 +1,20 @@
 import streamlit as st
-from PIL import Image, ImageDraw, ImageFont, ImageOps, ImageFilter
+from PIL import Image, ImageDraw, ImageFont, ImageOps, ImageFilter, ImageEnhance, ImageChops
 import io
 import zipfile
 import base64
 import textwrap
 import re
 
+def adjust_brightness(input_img, brightness=0):
+    enhancer = ImageEnhance.Brightness(input_img)
+    # Brightness is a value between 0.0 (black image) and 2.0 or higher (increased brightness), with 1 being the original image
+    adjusted_img = enhancer.enhance(1 + brightness / 255)
+    return adjusted_img
 
+def add_color_tint(image, tint_color, opacity=0.5):
+    tint_layer = Image.new("RGBA", image.size, tint_color)
+    return ImageChops.blend(image, tint_layer, opacity)
 
 def create_html_table(image_data, custom_title):
     # Start the HTML content with CSS
@@ -126,7 +134,7 @@ def create_html_table(image_data, custom_title):
 
     return html_content
 
-def add_watermark(image, watermark_text, font_path, font_size, stroke_color):
+def add_watermark(image, watermark_text, font_path, font_size, stroke_color, overlay_position):
     width, height = image.size
     stroke_width=3
     watermark_font = ImageFont.truetype(font_path, font_size)
@@ -141,7 +149,11 @@ def add_watermark(image, watermark_text, font_path, font_size, stroke_color):
 
     # Calculate position for watermark to avoid being cut off
     x = max(width - text_width - stroke_width - 10, 0)  # 10 pixels from the right edge
-    y = max(height - text_height - stroke_width - 10, 0)  # 10 pixels from the bottom edge
+    if overlay_position == "Top":
+        y = 10 
+    else:
+        y = max(height - text_height - stroke_width - 10, 0)  # Place watermark at the bottom edge
+
 
     # Draw stroke-only text
     draw.text((x, y), watermark_text, font=watermark_font, fill=(0, 0, 0, 0), stroke_width=stroke_width, stroke_fill=stroke_color)
@@ -150,59 +162,68 @@ def add_watermark(image, watermark_text, font_path, font_size, stroke_color):
     image.paste(text_image, (0, 0), text_image)
 
     return image
-def overlay_text_on_image(image, text, font_path, font_size, text_color, wrap_width_percentage, stroke_width, stroke_color):
+
+def overlay_text_on_image(image, text, font_path, font_size, text_color, wrap_width_percentage, stroke_width, stroke_color, overlay_position, brightness, vertical_padding, horizontal_padding, overlay_margin, tint_color, tint_opacity):
     font = ImageFont.truetype(font_path, font_size)
 
-    blur_padding_percentage= 0.03
+    # Convert padding percentages to pixel values
+    vertical_padding_px = int(image.height * (vertical_padding / 100))
+    horizontal_padding_px = int(image.width * (horizontal_padding / 100))
+
     # Calculate the width of the area to wrap the text in pixels
-    wrap_area_width_px = int(image.width * wrap_width_percentage)
-
-    # Estimate character width to calculate wrap width in characters
+    adjusted_wrap_percentage = min(1.6, wrap_width_percentage * 1.2) 
+    wrap_area_width_px = int(image.width * adjusted_wrap_percentage)    
     average_char_width = sum(font.getbbox(char)[2] for char in 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ') / 52
-    wrap_width_chars = max(1, int(wrap_area_width_px / average_char_width))  # at least one character
-
-    # Wrap the text
+    wrap_width_chars = max(1, int(wrap_area_width_px / average_char_width))    
     wrapped_text = textwrap.fill(text, width=wrap_width_chars)
-    wrapped_lines = wrapped_text.split('\n')
-
-    # Measure the width of the text block (longest line)
+    wrapped_lines = wrapped_text.split('\n')    
     max_line_width = max(font.getbbox(line)[2] for line in wrapped_lines)
-
-    # Measure the height of the text block
     text_block_height = sum([font.getbbox(line)[3] + font.getbbox(line)[1] for line in wrapped_lines])
 
-    # Calculate padding based on the image's width and blur padding percentage
-    blur_padding = int(image.width * blur_padding_percentage)
-
     # Calculate the width and height of the blurred background
-    bg_width = max_line_width + blur_padding * 2
-    bg_height = text_block_height + blur_padding * 2
+    bg_width = max_line_width + horizontal_padding_px * 2
+    bg_height = text_block_height + vertical_padding_px * 2
+
+    # Convert margin percentage to pixel value and calculate the position
+    max_margin = (image.height - bg_height) / 2
+    overlay_margin_px = int(max_margin * (overlay_margin / 100))
 
     # Calculate the position for the background
-    bg_x = max((image.width - bg_width) // 2, 0)
-    bg_y = max(image.height - bg_height - blur_padding, 0)
+    bg_x = (image.width - bg_width) // 2
+    if overlay_position == "Top":
+        bg_y = overlay_margin_px
+    else:
+        bg_y = image.height - bg_height - overlay_margin_px
 
     # Crop and blur the background area
     cropped_area = image.crop((bg_x, bg_y, bg_x + bg_width, bg_y + bg_height))
-    blurred_background = cropped_area.filter(ImageFilter.GaussianBlur(radius=blur_padding // 2)).convert("RGBA")
+    blurred_background = cropped_area.filter(ImageFilter.GaussianBlur(radius=min(horizontal_padding_px, vertical_padding_px) // 2)).convert("RGBA")
 
+    # Adjust the brightness if needed
+    if brightness != 0:
+        blurred_background = adjust_brightness(blurred_background, brightness)
+        # blurred_background = blend_with_color(blurred_background, brightness)
+    if tint:
+        blurred_background = add_color_tint(blurred_background, tint_color, tint_opacity)
+    
     # Create a mask for the blurred background to maintain rounded corners
+    corner_radius = max(vertical_padding_px, horizontal_padding_px) // 2
     mask = Image.new("L", (bg_width, bg_height), 0)
     mask_draw = ImageDraw.Draw(mask)
-    mask_draw.rounded_rectangle([(0, 0), (bg_width, bg_height)], radius=blur_padding, fill=255)
+    mask_draw.rounded_rectangle([(0, 0), (bg_width, bg_height)], radius=corner_radius, fill=255)
 
     # Paste the blurred background onto the original image
     image.paste(blurred_background, (bg_x, bg_y), mask)
 
     # Draw the wrapped text over the blurred background
     draw = ImageDraw.Draw(image)
-    current_y = bg_y + blur_padding
+    current_y = bg_y + vertical_padding_px
     for line in wrapped_lines:
         text_width = font.getbbox(line)[2]
         text_x = (image.width - text_width) // 2
 
+        # Outline text if stroke width is greater than 0
         if stroke_width > 0:
-            # Outline text
             draw.text((text_x, current_y), line, font=font, fill=stroke_color, stroke_width=stroke_width)
 
         # Draw the main text
@@ -210,6 +231,8 @@ def overlay_text_on_image(image, text, font_path, font_size, text_color, wrap_wi
         current_y += font.getbbox(line)[3] + font.getbbox(line)[1]  # Increment y position for the next line
 
     return image
+
+
 
 def extract_job_id(metadata):
     # Attempt to find a job ID in the image metadata description
@@ -283,39 +306,75 @@ st.title("PromptMark Studio")
 
 
 st.sidebar.title("Overlay Settings")
+user_name = st.sidebar.text_input("Corner text:")
 FONT_FILES = {
-    "PlayfairDisplaySC-Bold": "PlayfairDisplaySC-Bold.ttf",
-    "Poppins-Bold": "Poppins-Bold.ttf",
-    "Merriweather-Regular": "Merriweather-Regular.ttf",
     "Lato-Regular": "Lato-Regular.ttf",
+    "Merriweather-Regular": "Merriweather-Regular.ttf",
+    "Orbitron-SemiBold": "Orbitron-SemiBold.ttf",
     "Pacifico-Regular": "Pacifico-Regular.ttf",
-    "Orbitron-SemiBold": "Orbitron-SemiBold.ttf"
+    "PlayfairDisplaySC-Bold": "PlayfairDisplaySC-Bold.ttf",
+    "Poppins-Bold": "Poppins-Bold.ttf",        
+   
 }
 
-# Use Streamlit's selectbox to let the user select a font
-selected_font_display_name = st.sidebar.selectbox("Select a font:", list(FONT_FILES.keys()))
+# Font settings inside an expander
+with st.sidebar.expander("Text Styling options", True):
+    selected_font_display_name = st.selectbox("Select a font:", list(FONT_FILES.keys()),
+                                              help="Choose a font style for the text.")
+    selected_font = FONT_FILES[selected_font_display_name]
+    wrap_width_percentage = st.slider("Wrap width percentage", 0.1, 1.0, 0.8,
+                                      help="Adjust the width of the text wrap. At 90%, the text spans almost the full width.")
 
-# Map the selected friendly font name to its .ttf file path
-selected_font = FONT_FILES[selected_font_display_name]
-wrap_width_percentage = st.sidebar.slider("Wrap width percentage", 0.1, 1.0, 0.8)
-# Create columns for the text color and text size
-col1, col2 = st.sidebar.columns([1, 4])
-with col1:
-    text_color = st.color_picker("Text", '#000000')
-with col2:
-    font_size = st.slider("Font size", 10, 100, 24)
+    col1, col2 = st.columns([1, 4])
+    with col1:
+        text_color = st.color_picker("Text", '#000000')
+    with col2:
+        font_size = st.slider("Font size", 10, 100, 24)
 
-# Create columns for the stroke color and stroke width
-col3, col4 = st.sidebar.columns([1, 4])
-with col3:
-    stroke_color = st.color_picker("Stroke", '#FFFFFF')
-with col4:
-    stroke_width = st.slider("Stroke Width", 0, 20, 0)
+    col3, col4 = st.columns([1, 4])
+    with col3:
+        stroke_color = st.color_picker("Stroke", '#FFFFFF')
+    with col4:
+        stroke_width = st.slider("Stroke Width", 0, 20, 0)
 
-user_name = st.sidebar.text_input("Corner text:")
-overlay_description = st.sidebar.checkbox("Include Overlay", True)
+# Overlay positioning and styling settings inside another expander
+with st.sidebar.expander("Overlay Positioning & Styling", False):
+    overlay_description = st.checkbox("Include Overlay", True,
+                                      help="Toggle this to add or remove the text overlay on the image.")
+    brightness = st.slider("Brightness/Darkness", -255, 255, 0,
+                           help="Adjust the brightness or darkness of the overlay background."
+    )
+    tint = st.checkbox("Apply Tint")
+    tint_color = '#FFFFFF'  # Default tint color
+    tint_opacity = 0.5
+    if tint:        
+        col1, col2 = st.columns([1,4])
+        with col1:
+            tint_color = st.color_picker("Tint Color", '#FFFFFF')
+        with col2:
+            tint_opacity = st.slider("Tint Opacity", 0.0, 1.0, 0.5, help="Adjust the opacity of the color tint.")
 
+    overlay_position = st.selectbox("Overlay Position", ["Bottom", "Top"],
+                                    help="Select where to position the overlay text: at the top or bottom of the image."
+    )
 
+    overlay_margin = st.slider(
+        "Overlay Margin (%)", 0, 100, 10,
+        help="Adjust the margin as a percentage of the total height divided by two. At 100%, the overlay centers in the middle."
+    )
+
+    split_padding = st.checkbox("Non-uniform Padding")
+    if split_padding:
+        vertical_padding = st.slider(
+            "Vertical Padding (Top/Bottom)", 0.0, 5.0, 3.0, step=0.01, format="%.2f%%")
+        horizontal_padding = st.slider(
+            "Horizontal Padding (Left/Right)", 0.0, 5.0, 3.0, step=0.01, format="%.2f%%")
+    else:
+        uniform_padding = st.slider(
+            "Uniform Padding (All Sides)", 0.0, 5.0, 3.0, step=0.01, format="%.2f%%")
+        vertical_padding = horizontal_padding = uniform_padding
+
+    
 
 # st.image("path/to/hero_image.png", use_column_width=True)
 
@@ -333,12 +392,16 @@ if uploaded_files:
         cols[1].write(wrapped_description)
 
         if cols[2].button(f"Overlay {idx}", key=f"btn_overlay_{idx}"):
-            img = data['image'].convert("RGB")
+            img = data['image'].convert("RGB")            
             if overlay_description:
-                img = overlay_text_on_image(img, data['description'], selected_font, font_size, text_color, wrap_width_percentage, stroke_width, stroke_color)            
+                img = overlay_text_on_image(
+            img, data['description'], selected_font, font_size, text_color,
+            wrap_width_percentage, stroke_width, stroke_color, overlay_position,
+            brightness, vertical_padding, horizontal_padding, overlay_margin, tint_color, tint_opacity
+        )            
             if user_name:  # Only add watermark if user has entered a name
                 img = add_watermark(
-                    img, user_name, selected_font, 24, text_color
+                    img, user_name, selected_font, 24, text_color, overlay_position
                 )
             cols[1].image(img, use_column_width=True, caption=f"Overlayed {data['filename']}")
             buffer = io.BytesIO()
