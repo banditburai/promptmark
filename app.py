@@ -5,12 +5,14 @@ import zipfile
 import base64
 import textwrap
 import re
+from functools import partial
 
 default_overlay_settings = {
     'font_path': "Lato-Regular.ttf", 
     'font_size': 24,
     'text_color': '#000000',
-    'wrap_width_percentage': 0.8,
+    'wrap_width_percentage': 80,
+    'line_spacing_percentage': 100,
     'stroke_width': 0,
     'stroke_color': '#FFFFFF',
     'tint': False,
@@ -37,11 +39,13 @@ FONT_FILES = {
 }
 
 
+st.session_state['current_text'] = st.session_state.get('current_text', 'Select an image')
+
 if 'overlay_settings' not in st.session_state:
     st.session_state.overlay_settings = default_overlay_settings.copy()
 
 if 'selected_image_info' not in st.session_state:
-    st.session_state.selected_image_info = {'image': None, 'text': None}
+    st.session_state.selected_image_info = {'image': None, 'text': None, 'filename': None}
 
 if 'update_needed' not in st.session_state:
     st.session_state.update_needed = False    
@@ -51,20 +55,27 @@ def create_layout():
     with foo:
         file_upload_container = st.container()
         image_display_container = st.container()
+        image_download_container =st.container()
         image_selection_container = st.container()
         html_generation_container = st.container()
+        text_area_container = st.sidebar.container()
 
     return {
         "file_upload": file_upload_container,
         "image_display": image_display_container,
+        "image_download": image_download_container,
         "image_selection": image_selection_container,
-        "html_generation": html_generation_container
+        "html_generation": html_generation_container,
+        "text_area": text_area_container
     }
 
 def update_settings(key, value):
     # Update the specific setting
     st.session_state.overlay_settings[key] = value    
     st.session_state.update_needed = True
+
+def update_watermark():
+    setattr(st.session_state, 'update_needed', True)
 
 def update_font_path():
     update_settings('font_path', st.session_state.font_path)
@@ -105,6 +116,7 @@ def update_overlay_margin():
 def update_include_overlay():
     update_settings('include_overlay', st.session_state.include_overlay)
 
+
 def handle_padding_update():
     # Use default values as fallbacks
     default_vertical_padding = default_overlay_settings['vertical_padding']
@@ -125,21 +137,8 @@ def handle_padding_update():
 
     st.session_state.update_needed = True
 
-
-# def update_uniform_padding_checkbox():
-#     update_settings('uniform_padding_checkbox', st.session_state.uniform_padding_checkbox)
-
-# def update_vertical_padding():
-#     update_settings('vertical_padding', st.session_state.vertical_padding)
-
-# def update_horizontal_padding():
-#     update_settings('horizontal_padding', st.session_state.horizontal_padding)
-
-# def update_uniform_padding():
-#     update_settings('uniform_padding', st.session_state.uniform_padding)
-
 def process_image(image, text, settings):    
-    expected_keys = ['font_path', 'font_size', 'text_color', 'wrap_width_percentage', 'stroke_width', 'stroke_color', 'overlay_position', 'brightness', 'vertical_padding', 'horizontal_padding', 'overlay_margin', 'tint_color', 'tint_opacity']
+    expected_keys = ['font_path', 'font_size', 'text_color', 'wrap_width_percentage', 'stroke_width', 'stroke_color', 'overlay_position', 'brightness', 'vertical_padding', 'horizontal_padding', 'overlay_margin', 'tint_color', 'tint_opacity', 'line_spacing_percentage']
     filtered_settings = {key: settings[key] for key in expected_keys if key in settings}
     image_copy = image.copy()
     if not settings['include_overlay']:
@@ -150,25 +149,49 @@ def process_image(image, text, settings):
         updated_image = add_watermark(updated_image, user_name, filtered_settings['font_path'], 24, settings['text_color'], filtered_settings['overlay_position'])    
     return updated_image
 
+
 def update_selected_image():
-    if st.session_state.update_needed and st.session_state.selected_image_info['image']:
+    if st.session_state.update_needed and st.session_state.selected_image_info['image']:                
         processed_image = process_image(
             st.session_state.selected_image_info['image'],
-            st.session_state.selected_image_info['text'],
+            st.session_state.selected_image_info['text'],            
             st.session_state.overlay_settings
-        )
-        layout['image_display'].empty()
-        layout['image_display'].image(processed_image, caption="Current", use_column_width=True)
-        # Reset update_needed after updating the image
+        )        
+        # layout['image_display'].image(processed_image, caption="Current", use_column_width=True)
+        
+        st.session_state.processed_image = processed_image
         st.session_state.update_needed = False
 
+def update_text(data):
+   st.session_state['current_text'] = data['description']
+   st.session_state['selected_image_info'] = {
+       'image': data['image'].convert("RGB"),
+       'text': data['description'],
+       'filename': data['filename']
+   }
+   st.session_state['update_needed'] = True
+   update_selected_image()
+
+def prepare_download():
+    if 'processed_image' in st.session_state and st.session_state.processed_image is not None:
+        buffer = io.BytesIO()
+        st.session_state.processed_image.save(buffer, format='PNG')
+        buffer.seek(0)
+        filename = st.session_state.selected_image_info.get('filename', 'downloaded_image.png')
+        return buffer, f"overlay_{filename}"
+    else:
+        return None, None
+
+
 def select_and_display_image(data):
-    st.session_state.selected_image_info = {
-        'image': data['image'].convert("RGB"),
-        'text': data['description']
-    }
+    pass
+       
+
+def update_temp_description():
+    st.session_state.selected_image_info['text'] = st.session_state.current_text
     st.session_state.update_needed = True
-    update_selected_image()  
+    update_selected_image() 
+
 
 def adjust_brightness(input_img, brightness=0):
     enhancer = ImageEnhance.Brightness(input_img)
@@ -327,22 +350,25 @@ def add_watermark(image, watermark_text, font_path, font_size, stroke_color, ove
 
     return image
 
-def overlay_text_on_image(image, text, font_path, font_size, text_color, wrap_width_percentage, stroke_width, stroke_color, overlay_position, brightness, vertical_padding, horizontal_padding, overlay_margin, tint_color, tint_opacity):
+def overlay_text_on_image(image, text, font_path, font_size, text_color, wrap_width_percentage, stroke_width, stroke_color, overlay_position, brightness, vertical_padding, horizontal_padding, overlay_margin, tint_color, tint_opacity, line_spacing_percentage):
     font = ImageFont.truetype(font_path, font_size)
 
     # Convert padding percentages to pixel values
     vertical_padding_px = int(image.height * (vertical_padding / 100))
     horizontal_padding_px = int(image.width * (horizontal_padding / 100))
 
+    line_height = font.getbbox('Ay')[3]
+    line_spacing = int(line_height * (line_spacing_percentage / 100.0))
+
     # Calculate the width of the area to wrap the text in pixels
-    adjusted_wrap_percentage = min(1.6, wrap_width_percentage * 1.2) 
+    adjusted_wrap_percentage = min(1.6, (wrap_width_percentage/ 100) * 1.2) 
     wrap_area_width_px = int(image.width * adjusted_wrap_percentage)    
     average_char_width = sum(font.getbbox(char)[2] for char in 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ') / 52
     wrap_width_chars = max(1, int(wrap_area_width_px / average_char_width))    
     wrapped_text = textwrap.fill(text, width=wrap_width_chars)
     wrapped_lines = wrapped_text.split('\n')    
     max_line_width = max(font.getbbox(line)[2] for line in wrapped_lines)
-    text_block_height = sum([font.getbbox(line)[3] + font.getbbox(line)[1] for line in wrapped_lines])
+    text_block_height = sum([font.getbbox(line)[3] + font.getbbox(line)[1] for line in wrapped_lines]) + (len(wrapped_lines) - 1) * (line_spacing - line_height)
 
     # Calculate the width and height of the blurred background
     bg_width = max_line_width + horizontal_padding_px * 2
@@ -392,7 +418,7 @@ def overlay_text_on_image(image, text, font_path, font_size, text_color, wrap_wi
 
         # Draw the main text
         draw.text((text_x, current_y), line, fill=text_color, font=font)
-        current_y += font.getbbox(line)[3] + font.getbbox(line)[1]  # Increment y position for the next line
+        current_y += line_spacing  # Increment y position for the next line
 
     return image
 
@@ -468,16 +494,17 @@ st.title("PromptMark Studio")
 
 
 st.sidebar.title("Overlay Settings")
-user_name = st.sidebar.text_input("Corner text:")
+user_name = st.sidebar.text_input("Corner text:", on_change= update_watermark )
 
 # Font settings inside an expander
 with st.sidebar.expander("Text Styling options", True):
     font_path = st.selectbox("Select a font:", options=FONT_FILES, key="font_path", format_func=lambda name: name.split('-')[0], on_change=update_font_path)
     
 
-    wrap_width_percentage = st.slider("Wrap width percentage", 0.1, 1.0, 0.8, key="wrap_width_percentage", on_change=update_wrap_width_percentage,                                     
+    wrap_width_percentage = st.slider("Wrap width percentage", 10, 100, 80, key="wrap_width_percentage",format="%.0f%%", on_change=update_wrap_width_percentage,                                     
                                       help="Adjust the width of the text wrap. At 90%, the text spans almost the full width.")
-
+    line_spacing = st.slider("Line Spacing Percentage", 50, 150, 100, key="line_spacing_percentage", format="%.0f%%", on_change=lambda: update_settings('line_spacing_percentage', st.session_state.line_spacing_percentage))
+    
     col1, col2 = st.columns([1, 4])
     with col1:
         text_color = st.color_picker("Text", '#000000', key="text_color", on_change=update_text_color)
@@ -534,20 +561,38 @@ with st.sidebar.expander("Overlay Positioning & Styling", False):
         vertical_padding = horizontal_padding = uniform_padding
 
 
-# st.image("path/to/hero_image.png", use_column_width=True)
-
 layout = create_layout()
+
+with layout["text_area"]:
+    # Create text area without directly assigning to session state variable
+    edited_text = st.text_area("Edit Description:", value=st.session_state.current_text, key="current_text", on_change=update_temp_description)
+    # Update the session state variable if text area content is changed
+    if edited_text != st.session_state.current_text:
+        st.session_state.current_text = edited_text
+
 with layout["file_upload"]:
     uploaded_files = st.file_uploader("Upload ZIP files containing images", type=['png', 'zip'], accept_multiple_files=True)
 
-# image_placeholder = layout["image_display"] 
 all_image_data=[]
 
 with layout["image_display"]:    
     if st.session_state.update_needed:
-        update_selected_image()
+        update_selected_image()                
+    # Always display the processed image if it exists
+    if 'processed_image' in st.session_state and st.session_state.processed_image is not None:
+        st.image(st.session_state.processed_image, caption="Current", use_column_width=True)
 
-            
+
+with layout["image_download"]:
+    buffer, filename = prepare_download()
+    if buffer and filename:
+        st.download_button(
+            label="Download Image",
+            data=buffer,
+            file_name=filename,
+            mime="image/png"
+        )
+
 with layout["image_selection"]:
     if uploaded_files:
         all_image_data, html_file_name, total_images = process_images(uploaded_files)
@@ -559,9 +604,10 @@ with layout["image_selection"]:
             cols[1].write( textwrap.fill(data['description'], width=50))
 
             # Button to select the image for overlay
-            if cols[2].button(f"Select Img {idx}", key=f"btn_select_{idx}"):
+            select_button = partial(update_text, data)
+            if cols[2].button(f"Select Img {idx}", key=f"btn_select_{idx}",  on_click=select_button):                                                
                 select_and_display_image(data)
-              
+                
 
 with layout["html_generation"]:    
     if all_image_data:
@@ -576,4 +622,3 @@ with layout["html_generation"]:
             )
         elif not custom_title:
             st.warning("Please enter a custom title to enable HTML download.")
-
