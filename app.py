@@ -17,6 +17,7 @@ default_overlay_settings = {
     'include_overlay': True,
     'overlay_position': "Bottom",
     'brightness': 0,
+    'uniform_padding_checkbox': False,
     'uniform_padding': 3.0,
     'vertical_padding': 3.0,
     'horizontal_padding': 3.0,
@@ -35,74 +36,139 @@ FONT_FILES = {
     "Poppins-Bold.ttf"           
 }
 
-if 'prev_overlay_settings' not in st.session_state:
-    st.session_state.prev_overlay_settings = default_overlay_settings.copy()
 
 if 'overlay_settings' not in st.session_state:
     st.session_state.overlay_settings = default_overlay_settings.copy()
 
-if 'selected_image' not in st.session_state:
-    st.session_state.selected_image = None
-if 'selected_text' not in st.session_state:
-    st.session_state.selected_text = None
+if 'selected_image_info' not in st.session_state:
+    st.session_state.selected_image_info = {'image': None, 'text': None}
 
-image_placeholder=st.empty()
+if 'update_needed' not in st.session_state:
+    st.session_state.update_needed = False    
 
-def update_settings():
-    # Track changes in all relevant settings
-    settings_changed = False
-    for key in default_overlay_settings:
-        if key in st.session_state:
-            current_value = st.session_state[key]
-            previous_value = st.session_state.prev_overlay_settings.get(key, None)
-            if current_value != previous_value:
-                settings_changed = True
-                st.session_state.overlay_settings[key] = current_value
-    font_path_changed = st.session_state['font_path'] != st.session_state.prev_overlay_settings.get('font_path', None)
-    font_size_changed = st.session_state['font_size'] != st.session_state.prev_overlay_settings.get('font_size', None)
+def create_layout():
+    foo = st.container()
+    with foo:
+        file_upload_container = st.container()
+        image_display_container = st.container()
+        image_selection_container = st.container()
+        html_generation_container = st.container()
 
-    if font_path_changed or font_size_changed:
-        settings_changed = True
-        st.session_state.overlay_settings['font_path'] = st.session_state['font_path']
-        st.session_state.overlay_settings['font_size'] = st.session_state['font_size']
-    
-    # Check and update the non-uniform padding settings
-    if st.session_state.get('non-uniform_padding', False):
-        vertical_padding = st.session_state.get('vertical_padding', 3.0)
-        horizontal_padding = st.session_state.get('horizontal_padding', 3.0)
-        if vertical_padding != st.session_state.prev_overlay_settings.get('vertical_padding', 3.0) or horizontal_padding != st.session_state.prev_overlay_settings.get('horizontal_padding', 3.0):
-            settings_changed = True
-            st.session_state.overlay_settings['vertical_padding'] = vertical_padding
-            st.session_state.overlay_settings['horizontal_padding'] = horizontal_padding
+    return {
+        "file_upload": file_upload_container,
+        "image_display": image_display_container,
+        "image_selection": image_selection_container,
+        "html_generation": html_generation_container
+    }
+
+def update_settings(key, value):
+    # Update the specific setting
+    st.session_state.overlay_settings[key] = value    
+    st.session_state.update_needed = True
+
+def update_font_path():
+    update_settings('font_path', st.session_state.font_path)
+
+def update_font_size():
+    update_settings('font_size', st.session_state.font_size)
+
+def update_text_color():
+    update_settings('text_color', st.session_state.text_color)
+
+def update_stroke_color():
+    update_settings('stroke_color', st.session_state.stroke_color)
+
+def update_stroke_width():
+    update_settings('stroke_width', st.session_state.stroke_width)
+
+def update_wrap_width_percentage():
+    update_settings('wrap_width_percentage', st.session_state.wrap_width_percentage)
+
+def update_brightness():
+    update_settings('brightness', st.session_state.brightness)
+
+def update_tint():
+    update_settings('tint', st.session_state.tint)
+
+def update_tint_color():
+    update_settings('tint_color', st.session_state.tint_color)
+
+def update_tint_opacity():
+    update_settings('tint_opacity', st.session_state.tint_opacity)
+
+def update_overlay_position():
+    update_settings('overlay_position', st.session_state.overlay_position)
+
+def update_overlay_margin():
+    update_settings('overlay_margin', st.session_state.overlay_margin)
+
+def update_include_overlay():
+    update_settings('include_overlay', st.session_state.include_overlay)
+
+def handle_padding_update():
+    # Use default values as fallbacks
+    default_vertical_padding = default_overlay_settings['vertical_padding']
+    default_horizontal_padding = default_overlay_settings['horizontal_padding']
+    default_uniform_padding = default_overlay_settings['uniform_padding']
+
+    if st.session_state.uniform_padding_checkbox:
+        # Update to non-uniform padding values
+        vertical_padding = st.session_state.get('vertical_padding', default_vertical_padding)
+        horizontal_padding = st.session_state.get('horizontal_padding', default_horizontal_padding)
+        st.session_state.overlay_settings['vertical_padding'] = vertical_padding
+        st.session_state.overlay_settings['horizontal_padding'] = horizontal_padding
     else:
-        uniform_padding = st.session_state.get('uniform_padding', 3.0)
-        if uniform_padding != st.session_state.prev_overlay_settings.get('uniform_padding', 3.0):
-            settings_changed = True
-            st.session_state.overlay_settings['vertical_padding'] = uniform_padding
-            st.session_state.overlay_settings['horizontal_padding'] = uniform_padding
+        # Update to uniform padding value
+        uniform_padding = st.session_state.get('uniform_padding', default_uniform_padding)
+        st.session_state.overlay_settings['vertical_padding'] = uniform_padding
+        st.session_state.overlay_settings['horizontal_padding'] = uniform_padding
 
-    # Process and display the image if settings have changed
-    if settings_changed and st.session_state.get('original_image') is not None:
-        processed_image = process_and_display_image(
-            st.session_state.original_image, 
-            st.session_state.selected_text, 
-            st.session_state.overlay_settings, 
-            image_placeholder
-        )
-    st.session_state.prev_overlay_settings = {key: st.session_state.overlay_settings.get(key) for key in default_overlay_settings}
+    st.session_state.update_needed = True
 
-def process_and_display_image(image, text, settings, placeholder):
+
+# def update_uniform_padding_checkbox():
+#     update_settings('uniform_padding_checkbox', st.session_state.uniform_padding_checkbox)
+
+# def update_vertical_padding():
+#     update_settings('vertical_padding', st.session_state.vertical_padding)
+
+# def update_horizontal_padding():
+#     update_settings('horizontal_padding', st.session_state.horizontal_padding)
+
+# def update_uniform_padding():
+#     update_settings('uniform_padding', st.session_state.uniform_padding)
+
+def process_image(image, text, settings):    
     expected_keys = ['font_path', 'font_size', 'text_color', 'wrap_width_percentage', 'stroke_width', 'stroke_color', 'overlay_position', 'brightness', 'vertical_padding', 'horizontal_padding', 'overlay_margin', 'tint_color', 'tint_opacity']
     filtered_settings = {key: settings[key] for key in expected_keys if key in settings}
     image_copy = image.copy()
+    if not settings['include_overlay']:
+        return add_watermark(image, user_name, settings['font_path'], 24, settings['text_color'], settings['overlay_position'])
+    
     updated_image = overlay_text_on_image(image_copy, text, **filtered_settings)
     if user_name:
-        updated_image = add_watermark(updated_image, user_name, filtered_settings['font_path'], 24, settings['text_color'], filtered_settings['overlay_position'])
-    
-    # Display the updated image
-    placeholder.image(updated_image, caption="Currently selected image", use_column_width=True)
-    return image, updated_image
+        updated_image = add_watermark(updated_image, user_name, filtered_settings['font_path'], 24, settings['text_color'], filtered_settings['overlay_position'])    
+    return updated_image
 
+def update_selected_image():
+    if st.session_state.update_needed and st.session_state.selected_image_info['image']:
+        processed_image = process_image(
+            st.session_state.selected_image_info['image'],
+            st.session_state.selected_image_info['text'],
+            st.session_state.overlay_settings
+        )
+        layout['image_display'].empty()
+        layout['image_display'].image(processed_image, caption="Current", use_column_width=True)
+        # Reset update_needed after updating the image
+        st.session_state.update_needed = False
+
+def select_and_display_image(data):
+    st.session_state.selected_image_info = {
+        'image': data['image'].convert("RGB"),
+        'text': data['description']
+    }
+    st.session_state.update_needed = True
+    update_selected_image()  
 
 def adjust_brightness(input_img, brightness=0):
     enhancer = ImageEnhance.Brightness(input_img)
@@ -406,101 +472,98 @@ user_name = st.sidebar.text_input("Corner text:")
 
 # Font settings inside an expander
 with st.sidebar.expander("Text Styling options", True):
-    selected_font_name = st.selectbox("Select a font:", options=FONT_FILES, key="font_path", format_func=lambda name: name.split('-')[0])
+    font_path = st.selectbox("Select a font:", options=FONT_FILES, key="font_path", format_func=lambda name: name.split('-')[0], on_change=update_font_path)
+    
 
-
-    wrap_width_percentage = st.slider("Wrap width percentage", 0.1, 1.0, 0.8, key="wrap_width_percentage", on_change= update_settings,                                     
+    wrap_width_percentage = st.slider("Wrap width percentage", 0.1, 1.0, 0.8, key="wrap_width_percentage", on_change=update_wrap_width_percentage,                                     
                                       help="Adjust the width of the text wrap. At 90%, the text spans almost the full width.")
 
     col1, col2 = st.columns([1, 4])
     with col1:
-        text_color = st.color_picker("Text", '#000000', key="text_color", on_change= update_settings)
+        text_color = st.color_picker("Text", '#000000', key="text_color", on_change=update_text_color)
     with col2:
-        font_size = st.slider("Font size", 10, 100, 24, key="font_size", on_change= update_settings)
+        font_size = st.slider("Font size", 10, 100, 24, key="font_size", on_change=update_font_size)
 
     col3, col4 = st.columns([1, 4])
     with col3:
-        stroke_color = st.color_picker("Stroke", '#FFFFFF', key="stroke_color", on_change= update_settings)
+        stroke_color = st.color_picker("Stroke", '#FFFFFF', key="stroke_color", on_change= update_stroke_color)
     with col4:
-        stroke_width = st.slider("Stroke Width", 0, 20, 0, key="stroke_width", on_change= update_settings)
+        stroke_width = st.slider("Stroke Width", 0, 20, 0, key="stroke_width", on_change= update_stroke_width)
 
 # Overlay positioning and styling settings inside another expander
 with st.sidebar.expander("Overlay Positioning & Styling", False):
-    overlay_description = st.checkbox("Include Overlay", True, key="include_overlay", on_change= update_settings,                                   
-                                      help="Toggle this to add or remove the text overlay on the image.")
+    overlay_description = st.checkbox("Include Overlay", True, key="include_overlay", on_change= update_include_overlay,                                   
+                                      help="Toggle this to add or remove the text overlay on the image.")    
     brightness = st.slider("Brightness/Darkness", -255, 255, 0,
-                           key="brightness", on_change= update_settings,
+                           key="brightness", on_change= update_brightness,
                            help="Adjust the brightness or darkness of the overlay background."
     )
-    tint = st.checkbox("Apply Tint", key="tint", on_change= update_settings)
+    tint = st.checkbox("Apply Tint", key="tint", on_change= update_tint)
     tint_color = '#FFFFFF'  # Default tint color
     tint_opacity = 0.5
     if tint:        
         col1, col2 = st.columns([1,4])
         with col1:
-            tint_color = st.color_picker("Tint Color", '#FFFFFF', key="tint_color", on_change= update_settings)
+            tint_color = st.color_picker("Tint Color", '#FFFFFF', key="tint_color", on_change= update_tint_color)
         with col2:
-            tint_opacity = st.slider("Tint Opacity", 0.0, 1.0, 0.5, help="Adjust the opacity of the color tint.", key="tint_opacity", on_change= update_settings,                                     
+            tint_opacity = st.slider("Tint Opacity", 0.0, 1.0, 0.5, help="Adjust the opacity of the color tint.", key="tint_opacity", on_change= update_tint_opacity,                                     
                                      )
 
     overlay_position = st.selectbox("Overlay Position", ["Bottom", "Top"],
-                                    key="overlay_position", on_change= update_settings,                            
+                                    key="overlay_position", on_change= update_overlay_position,                            
                                     help="Select where to position the overlay text: at the top or bottom of the image."
     )
 
     overlay_margin = st.slider(
-        "Overlay Margin (%)", 0, 100, 10, key="overlay_margin", on_change= update_settings,    
+        "Overlay Margin (%)", 0, 100, 10, key="overlay_margin", on_change= update_overlay_margin,    
         help="Adjust the margin as a percentage of the total height divided by two. At 100%, the overlay centers in the middle."
     )
 
-    split_padding = st.checkbox("Non-uniform Padding", key="non-uniform_padding", on_change= update_settings)
+    split_padding = st.checkbox("Non-uniform Padding", key="uniform_padding_checkbox", on_change= handle_padding_update)
     if split_padding:
         vertical_padding = st.slider(
-            "Vertical Padding (Top/Bottom)", 0.0, 5.0, 3.0, step=0.01, format="%.2f%%", key="vertical_padding", on_change= update_settings,
+            "Vertical Padding (Top/Bottom)", 0.0, 5.0, 3.0, step=0.01, format="%.2f%%", key="vertical_padding", on_change= handle_padding_update,
             )
         horizontal_padding = st.slider(
-            "Horizontal Padding (Left/Right)", 0.0, 5.0, 3.0, step=0.01, format="%.2f%%", key ="horizontal_padding", on_change= update_settings,
+            "Horizontal Padding (Left/Right)", 0.0, 5.0, 3.0, step=0.01, format="%.2f%%", key ="horizontal_padding", on_change= handle_padding_update,
             )
     else:
         uniform_padding = st.slider(
-            "Uniform Padding (All Sides)", 0.0, 5.0, 3.0, step=0.01, format="%.2f%%", key = "uniform_padding", on_change= update_settings,
+            "Uniform Padding (All Sides)", 0.0, 5.0, 3.0, step=0.01, format="%.2f%%", key = "uniform_padding", on_change= handle_padding_update,
             )
         vertical_padding = horizontal_padding = uniform_padding
 
 
 # st.image("path/to/hero_image.png", use_column_width=True)
 
-uploaded_files = st.file_uploader("Upload ZIP files containing images", type=['png', 'zip'], accept_multiple_files=True)
-image_placeholder = st.empty()
-# Process uploaded files and display UI for each image
+layout = create_layout()
+with layout["file_upload"]:
+    uploaded_files = st.file_uploader("Upload ZIP files containing images", type=['png', 'zip'], accept_multiple_files=True)
 
+# image_placeholder = layout["image_display"] 
+all_image_data=[]
 
-if 'selected_image' in st.session_state and 'original_image' in st.session_state:
-    if st.session_state.selected_image is not None and st.session_state.original_image is not None:
-        original_image, processed_image = process_and_display_image(
-            st.session_state.original_image, 
-            st.session_state.selected_text, 
-            st.session_state.overlay_settings, 
-            image_placeholder
-        )
-        st.session_state.selected_image = processed_image        
-if uploaded_files:
-    all_image_data, html_file_name, total_images = process_images(uploaded_files)
-    
-    # Display each uploaded image with an option to select for overlay
-    for idx, data in enumerate(all_image_data):
-        cols = st.columns([1, 3, 1])
-        cols[0].image(f"data:image/png;base64,{data['thumbnail']}", use_column_width=True, width=150)        
-        cols[1].write( textwrap.fill(data['description'], width=50))
+with layout["image_display"]:    
+    if st.session_state.update_needed:
+        update_selected_image()
 
-        # Button to select the image for overlay
-        if cols[2].button(f"Select Image {idx}", key=f"btn_select_{idx}"):
-            original_image = data['image'].convert("RGB")
-            st.session_state.original_image = original_image                       
-            st.session_state.selected_text = data['description']            
-            st.session_state.selected_image = process_and_display_image(st.session_state.original_image,  st.session_state.selected_text, st.session_state.overlay_settings, image_placeholder)
+            
+with layout["image_selection"]:
+    if uploaded_files:
+        all_image_data, html_file_name, total_images = process_images(uploaded_files)
+        
+        # Display each uploaded image with an option to select for overlay
+        for idx, data in enumerate(all_image_data):
+            cols = st.columns([1, 3, 1])
+            cols[0].image(f"data:image/png;base64,{data['thumbnail']}", use_column_width=True, width=150)        
+            cols[1].write( textwrap.fill(data['description'], width=50))
 
-    # Create HTML content and download button
+            # Button to select the image for overlay
+            if cols[2].button(f"Select Img {idx}", key=f"btn_select_{idx}"):
+                select_and_display_image(data)
+              
+
+with layout["html_generation"]:    
     if all_image_data:
         custom_title = st.text_input("Enter a custom title for the HTML file:", "My Image Collection")
         if custom_title and st.button('Generate HTML'):
