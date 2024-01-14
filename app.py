@@ -494,44 +494,54 @@ st.title("PromptMark Studio")
 
 
 st.sidebar.title("Overlay Settings")
-user_name = st.sidebar.text_input("Corner text:", on_change= update_watermark )
+user_name = st.sidebar.text_input("Corner text:", on_change= update_watermark,
+                                  help= "Enter text to display in the corner of the image." )
 
 # Font settings inside an expander
 with st.sidebar.expander("Text Styling options", True):
-    font_path = st.selectbox("Select a font:", options=FONT_FILES, key="font_path", format_func=lambda name: name.split('-')[0], on_change=update_font_path)
+    font_path = st.selectbox("Select a font:", options=FONT_FILES, key="font_path", format_func=lambda name: name.split('-')[0], on_change=update_font_path,
+                             help="Choose a font for the text overlay."
+)
     
 
     wrap_width_percentage = st.slider("Wrap width percentage", 10, 100, 80, key="wrap_width_percentage",format="%.0f%%", on_change=update_wrap_width_percentage,                                     
-                                      help="Adjust the width of the text wrap. At 90%, the text spans almost the full width.")
-    line_spacing = st.slider("Line Spacing Percentage", 50, 150, 100, key="line_spacing_percentage", format="%.0f%%", on_change=lambda: update_settings('line_spacing_percentage', st.session_state.line_spacing_percentage))
+                                      help="Adjust the width of the text wrap relative to the image width.")
+    line_spacing = st.slider("Line Spacing Percentage", 50, 150, 100, key="line_spacing_percentage", format="%.0f%%", on_change=lambda: update_settings('line_spacing_percentage', st.session_state.line_spacing_percentage),
+                             help="Adjust the spacing between lines of text.")
     
     col1, col2 = st.columns([1, 4])
     with col1:
-        text_color = st.color_picker("Text", '#000000', key="text_color", on_change=update_text_color)
+        text_color = st.color_picker("Text", '#000000', key="text_color", on_change=update_text_color,
+                                    )
     with col2:
-        font_size = st.slider("Font size", 10, 100, 24, key="font_size", on_change=update_font_size)
+        font_size = st.slider("Font size", 10, 100, 24, key="font_size", on_change=update_font_size,
+                              help="Adjust the font size for the text overlay.")
 
     col3, col4 = st.columns([1, 4])
     with col3:
-        stroke_color = st.color_picker("Stroke", '#FFFFFF', key="stroke_color", on_change= update_stroke_color)
+        stroke_color = st.color_picker("Stroke", '#FFFFFF', key="stroke_color", on_change= update_stroke_color,
+                                       )
     with col4:
-        stroke_width = st.slider("Stroke Width", 0, 20, 0, key="stroke_width", on_change= update_stroke_width)
+        stroke_width = st.slider("Stroke Width", 0, 20, 0, key="stroke_width", on_change= update_stroke_width,
+                                 help="Adjust the width of the stroke (outline) around the text.")
 
 # Overlay positioning and styling settings inside another expander
 with st.sidebar.expander("Overlay Positioning & Styling", False):
     overlay_description = st.checkbox("Include Overlay", True, key="include_overlay", on_change= update_include_overlay,                                   
-                                      help="Toggle this to add or remove the text overlay on the image.")    
+                                      help="Toggle to display or hide the text overlay on the image.")    
     brightness = st.slider("Brightness/Darkness", -255, 255, 0,
                            key="brightness", on_change= update_brightness,
                            help="Adjust the brightness or darkness of the overlay background."
     )
-    tint = st.checkbox("Apply Tint", key="tint", on_change= update_tint)
+    tint = st.checkbox("Apply Tint", key="tint", on_change= update_tint,
+                       help="Toggle the color tint effect.")
     tint_color = '#FFFFFF'  # Default tint color
     tint_opacity = 0.5
     if tint:        
         col1, col2 = st.columns([1,4])
         with col1:
-            tint_color = st.color_picker("Tint Color", '#FFFFFF', key="tint_color", on_change= update_tint_color)
+            tint_color = st.color_picker("Tint Color", '#FFFFFF', key="tint_color", on_change= update_tint_color,
+                                         help="Choose a color for the tint effect.")
         with col2:
             tint_opacity = st.slider("Tint Opacity", 0.0, 1.0, 0.5, help="Adjust the opacity of the color tint.", key="tint_opacity", on_change= update_tint_opacity,                                     
                                      )
@@ -542,22 +552,23 @@ with st.sidebar.expander("Overlay Positioning & Styling", False):
     )
 
     overlay_margin = st.slider(
-        "Overlay Margin (%)", 0, 100, 10, key="overlay_margin", on_change= update_overlay_margin,    
+        "Overlay Margin (%)", 0, 100, 10, key="overlay_margin", format="%.0f%%", on_change= update_overlay_margin,    
         help="Adjust the margin as a percentage of the total height divided by two. At 100%, the overlay centers in the middle."
     )
 
-    split_padding = st.checkbox("Non-uniform Padding", key="uniform_padding_checkbox", on_change= handle_padding_update)
+    split_padding = st.checkbox("Non-uniform Padding", key="uniform_padding_checkbox", on_change= handle_padding_update,
+                                help="Toggle this to set different padding values for vertical and horizontal sides.")
     if split_padding:
         vertical_padding = st.slider(
             "Vertical Padding (Top/Bottom)", 0.0, 5.0, 3.0, step=0.01, format="%.2f%%", key="vertical_padding", on_change= handle_padding_update,
-            )
+            help="Adjust the top and bottom padding of the text overlay.")
         horizontal_padding = st.slider(
             "Horizontal Padding (Left/Right)", 0.0, 5.0, 3.0, step=0.01, format="%.2f%%", key ="horizontal_padding", on_change= handle_padding_update,
             )
     else:
         uniform_padding = st.slider(
             "Uniform Padding (All Sides)", 0.0, 5.0, 3.0, step=0.01, format="%.2f%%", key = "uniform_padding", on_change= handle_padding_update,
-            )
+            help="Adjust the padding uniformly on all sides of the text overlay.")
         vertical_padding = horizontal_padding = uniform_padding
 
 
