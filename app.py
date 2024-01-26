@@ -443,7 +443,7 @@ def process_images(uploaded_files):
         if zipfile.is_zipfile(uploaded_file):
             with zipfile.ZipFile(uploaded_file, 'r') as z:
                 for file_name in z.namelist():
-                    if file_name.lower().endswith('.png'):
+                    if file_name.lower().endswith(('.png', '.jpg', '.jpeg')):
                         with z.open(file_name) as image_file:
                             img = Image.open(image_file)
                             img_copy = img.copy()  # Create a copy of the image
@@ -582,7 +582,7 @@ with layout["text_area"]:
         st.session_state.current_text = edited_text
 
 with layout["file_upload"]:
-    uploaded_files = st.file_uploader("Upload ZIP files containing images", type=['png', 'zip'], accept_multiple_files=True)
+    uploaded_files = st.file_uploader("Upload ZIP files containing images", type=['png', 'jpeg', 'zip'], accept_multiple_files=True)
 
 all_image_data=[]
 
